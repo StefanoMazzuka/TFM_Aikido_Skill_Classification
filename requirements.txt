@@ -1,0 +1,10 @@
+imbalanced_learn==0.13.0
+matplotlib==3.10.0
+pandas==2.2.3
+polars==1.22.0
+pyarrow==19.0.0
+scikit_learn==1.6.1
+seaborn==0.13.2
+torch==2.5.1
+torchmetrics==1.6.1
+tsfel==0.1.9
