@@ -1,4 +1,4 @@
-# 📌 Análisis y Clasificación de Movimientos en Aikido con Aprendizaje Automático  
+# 📌 Clasificación de Niveles de Experiencia de Aikido Mediante Segmentación de Series Temporales y Algoritmos de Aprendizaje Supervisado
 
 📅 **Año:** 2025  
 👨‍💻 **Autor:** Stefano Mazzuka Cassani  
