@@ -3,7 +3,6 @@
 📅 **Año:** 2025  
 👨‍💻 **Autor:** Stefano Mazzuka Cassani  
 🏢 **Universidad:** Universidad Nacional de Educación a Distancia (UNED)  
-
 Este repositorio contiene el código fuente para el análisis y clasificación de movimientos en Aikido, basado en los datos inerciales proporcionados por el trabajo 🔗 [Exploring raw data transformations on inertial sensor data to model user expertise when learning psychomotor skills](https://link.springer.com/article/10.1007/s11257-024-09393-2). Se emplean técnicas de **Machine Learning** y **Deep Learning**, incluyendo `Gaussian Process Regression (GPR)`, `Temporal Convolutional Networks (TCN)` y `Gradient Boosted Decision Trees (GBDT)`.
 Los datos proporcionados en este repositorio son un sample muy reducido de los originales, a fin de poder ejecutar este código.
 ---
