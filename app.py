@@ -419,69 +419,77 @@ def clean_data_shikko():
 
     fixed_values.write_csv(f'shikko_data_fixed_values.csv', separator='|')
     data.write_csv(f'shikko_data_clean.csv', separator='|')
-def create_feature_dataset(dataset, columns_to_process_list, features_list):
+def create_feature_dataset(dataset, columns_to_process_list, features_list, window_size=40, overlap=0.5):
+    # Cargar los datos
     data = pl.read_csv(f'{dataset}_clean.csv', separator='|')
 
-    # Configuración de TSFEL
-    cfg = tsfel.get_features_by_domain()  # Configuración predeterminada
+    # Configuración de TSFEL (extrae solo las características deseadas)
+    cfg = tsfel.get_features_by_domain()
+    filtered_cfg = {domain: {k: v for k, v in cfg[domain].items() if v['function'] in features_list} for domain in cfg}
 
-    # Crear una configuración filtrada basada en features_list
-    filtered_cfg = {}
-    for domain in cfg:
-        filtered_cfg[domain] = {
-            key: cfg[domain][key] for key in cfg[domain] if cfg[domain][key]['function'] in features_list
-        }
+    # Lista para almacenar las características por grupo y segmento
+    all_features_list = []
 
-    # Lista para almacenar las características por grupo
-    features_list = []
-
-    # Agrupar los datos por 'Name' y 'Type'
+    # Agrupar por 'Name' y 'Type'
     grouped_data = data.group_by(['Name', 'Type'])
 
-    # Lista de columnas a procesar
-    columns_to_process = [col for col in data.columns if col in columns_to_process_list]
+    count = 0
 
-    # Procesar cada grupo
+    # Procesar cada grupo (cada persona y tipo de movimiento)
     for group_key, group_df in grouped_data:
-        # Convertir el grupo a pandas para trabajar con TSFEL
-        group_df = group_df.sort('Time')  # Ordenar por tiempo
+        # Ordenar por tiempo
+        group_df = group_df.sort('Time')
 
-        # Crear un diccionario para almacenar las características
-        features_dict = {}
+        print('Name:', group_key, count)
 
-        # Procesar cada columna en la lista
-        for col in columns_to_process:
-            # Extraer características de la columna
-            signal   = group_df[col].to_numpy()
-            features = tsfel.time_series_features_extractor(filtered_cfg, signal, fs=100, verbose=0)
+        # Convertir a numpy para procesamiento
+        signals_dict = {col: group_df[col].to_numpy() for col in columns_to_process_list}
 
-            # Añadir las características al diccionario, prefijadas con el nombre de la columna
-            for feature_col in features.columns:
-                features_dict[f'{col}_{feature_col}'] = features[feature_col]
+        # Definir los índices de las ventanas deslizantes
+        step_size   = int(window_size * (1 - overlap))  # Tamaño de paso basado en el solapamiento
+        num_samples = len(group_df)
 
-        # Convertir el diccionario a un DataFrame de Polars
-        combined_features = pl.DataFrame(features_dict)
+        for start in range(0, num_samples - window_size + 1, step_size):
+            end = start + window_size
 
-        # Añadir identificadores al grupo de características
-        combined_features = combined_features.with_columns([
-            pl.lit(group_key[0]).alias('Name'),
-            pl.lit(group_key[1]).alias('Type')
-        ])
+            # Crear un diccionario para almacenar características de la ventana
+            window_features_dict = {}
 
-        # Añadir al conjunto general
-        features_list.append(combined_features)
+            # Extraer características para cada serie temporal en la ventana
+            for col, signal in signals_dict.items():
+                segment = signal[start:end]
+                features = tsfel.time_series_features_extractor(filtered_cfg, segment, fs=100, verbose=0)
 
-    # Combinar todas las características en un solo DataFrame y seleccionar las columnas que sean numericas
-    features_df  = (pl.concat(features_list))
+                # Agregar las características al diccionario con prefijo de la columna
+                for feature_col in features.columns:
+                    window_features_dict[f'{col}_{feature_col}'] = features[feature_col].values[0]  # TSFEL devuelve un DF
+
+            # Agregar identificadores
+            window_features_dict['Name'] = group_key[0]
+            window_features_dict['Type'] = group_key[1]
+            window_features_dict['Segment_Start'] = start
+            window_features_dict['Segment_End']   = end
+
+            # Convertir a DataFrame de Polars y agregar a la lista
+            all_features_list.append(pl.DataFrame([window_features_dict]))
+
+        count += 1
+
+    # Unir todas las características en un solo DataFrame
+    features_df = pl.concat(all_features_list)
+
+    # Cargar valores fijos y unir por 'Name'
     fixed_values = pl.read_csv(f'{dataset}_fixed_values.csv', separator='|')
-    features_df  = features_df.join(fixed_values, on='Name')
+    features_df = features_df.join(fixed_values, on='Name', how='left')
 
-    # Guardar los vectores de características en un archivo CSV
+    # Guardar en CSV
     features_df.sort('Name').write_csv(f'{dataset}_features.csv', separator='|')
+
+    print(f"Se generó el archivo {dataset}_features.csv con características por segmento.")
 def create_selected_features_dataset(dataset):
     data = pl.read_csv(f'{dataset}_features.csv', separator='|')
 
-    columns_without_nulls = [col for col in data.columns if data[col].null_count() == 0]
+    columns_without_nulls = [col for col in data.columns if data[col].is_null().sum() == 0 and (data[col].is_nan().sum() if data[col].dtype.is_float() else 0) == 0]
     data = data.select(columns_without_nulls)
 
     # Separar las características (X) y la etiqueta (y)
@@ -497,7 +505,7 @@ def create_selected_features_dataset(dataset):
     X_scaled = scaler.fit_transform(X_np)
 
     # Ajustar el modelo LASSO
-    alpha = 0.01 if dataset == 'bokken_data' else 0.1
+    alpha = 0.01 if dataset == 'bokken_data' else 0.2
     lasso = Lasso(alpha=alpha)  # Ajusta alpha según la regularización deseada
     lasso.fit(X_scaled, y_np)
 
